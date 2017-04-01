@@ -1,0 +1,12 @@
+#mac
+.DS_Store
+._*
+#sass
+.sass-cache/    
+#WP用
+.htaccess
+wp-config.php
+wp-content/uploads/
+*.log
+sitemap.xml
+sitemap.xml.gz
