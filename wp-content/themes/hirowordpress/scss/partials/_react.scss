@@ -1,0 +1,15 @@
+.react {
+  &__text {
+    margin-bottom: 12px;
+    font-size: 1.4rem;
+  }
+  &__inputText {
+    margin-bottom: 12px;
+    padding: 4px;
+    width: 100%;
+    background-color: $white-l;
+    border: 1px solid $gray-m;
+    border-radius: 2px;
+    font-size: 2rem;
+  }
+}

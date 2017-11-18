@@ -1,0 +1,33 @@
+.article {
+  padding: 20px;
+  width: calc(100vw - 20px);
+  background: inherit;
+  position: relative;
+  overflow: hidden;
+  &::before {
+    content: "";
+    display: block;
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background: inherit;
+    filter: blur(20px);
+    transform: scale(1.1);
+  }
+  &__title {
+    margin-bottom: 20px;
+  }
+  &__permalink {
+    color: $white-l;
+    font-size: 3.2rem;
+    font-weight: 100;
+  }
+  &__date {
+    margin-bottom: 24px;
+    display: block;
+    color: $gray-m;
+    font-weight: 200;
+  }
+}

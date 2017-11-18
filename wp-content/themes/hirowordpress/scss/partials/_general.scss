@@ -1,0 +1,23 @@
+@import url('https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900');
+
+* {
+  box-sizing: border-box;
+  position: relative;
+}
+
+html {
+  font-family: Roboto, "Hiragino Sans";
+  font-size: 62.5%;
+  color: $black-m;
+}
+
+a {
+  text-decoration: none;
+  transition: all .2s ease;
+  color: $link;
+  font-weight: 300;
+  &:hover {
+    transition: all .2s ease;
+    opacity: .8;
+  }
+}

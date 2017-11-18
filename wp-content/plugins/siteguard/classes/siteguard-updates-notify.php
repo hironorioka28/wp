@@ -69,7 +69,7 @@ class SiteGuard_UpdatesNotify extends SiteGuard_Base {
 		wp_schedule_event( time(), 'daily', self::CRON_NAME );
 	}
 
-	public function feature_off() {
+	static public function feature_off() {
 		wp_clear_scheduled_hook( self::CRON_NAME ); // clear cron
 	}
 

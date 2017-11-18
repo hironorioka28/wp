@@ -5,329 +5,54 @@ Plugin URI: https://github.com/FameThemes/famethemes-demo-importer
 Description: Demo data import tool for FameThemes's themes.
 Author: famethemes
 Author URI:  http://www.famethemes.com/
-Version: 1.0.3
-Text Domain: ftdi
+Version: 1.0.8
+Text Domain: demo-contents
 License: GPL version 2 or later - http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 */
 
 
-class FT_Demo_Content_Importer {
+define( 'DEMO_CONTENT_URL', trailingslashit ( plugins_url('', __FILE__) ) );
+define( 'DEMO_CONTENT_PATH', trailingslashit( plugin_dir_path( __FILE__) ) );
+
+
+class Demo_Contents {
     public $dir;
     public $url;
-    public $git_repo = 'https://raw.githubusercontent.com/FameThemes/famethemes-xml-demos/master/';
-    function __construct( ){
+    private static $git_repo = 'FameThemes/famethemes-xml-demos';
+    public $dashboard;
+    public $progress;
+    static $_instance;
 
-        $this->url = trailingslashit( plugins_url('', __FILE__) );
-        $this->dir = trailingslashit( plugin_dir_path( __FILE__) );
-
-        require_once $this->dir.'inc/class-demo-content.php';
-        add_action( 'wp_ajax_ft_demo_import_content', array( $this, 'ajax_import' ) );
-        add_action( 'wp_ajax_ft_demo_import_download', array( $this, 'ajax_download' ) );
-        add_action( 'wp_ajax_ft_demo_export', array( $this, 'ajax_export' ) );
-
-        $template_slug = get_option( 'template' );
-        $theme_slug = get_option( 'stylesheet' );
-        // child theme active
-        if ( $template_slug != $theme_slug ) {
-            add_action( $template_slug.'_demo_import_content_tab', array( $this, 'display_import' ) );
-        } else {
-            add_action( $theme_slug.'_demo_import_content_tab', array( $this, 'display_import' ) );
+    static function get_instance(){
+        if ( is_null( self::$_instance ) ) {
+            self::$_instance = new self();
         }
 
-        add_action( 'customize_controls_print_footer_scripts', array( $this, 'update_customizer_keys' ) );
+        return self::$_instance ;
+    }
+
+    function __construct(){
+
+        require_once DEMO_CONTENT_PATH.'inc/class-tgm-plugin-activation.php';
+        require_once DEMO_CONTENT_PATH.'inc/theme-supports.php';
+        require_once DEMO_CONTENT_PATH.'inc/class-dashboard.php';
+        require_once DEMO_CONTENT_PATH.'inc/class-progress.php';
+        $this->dashboard = new Demo_Content_Dashboard();
+        $this->progress = new Demo_Contents_Progress();
         if ( is_admin() ) {
-            add_action( 'admin_enqueue_scripts', array( $this, 'css' ) );
+            add_action('init', array($this, 'export'));
         }
 
     }
 
-    function update_customizer_keys(){
-        $key = 'ft_demo_customizer_keys';
-        $theme_slug = get_option( 'stylesheet' );
-        $data = get_option( $key );
-        if ( ! is_array( $data ) ) {
-            $data = array();
-        }
-
-        global $wp_customize;
-
-        $pages           = get_pages();
-        $option_pages    = array();
-        $option_pages[0] = esc_html__( 'Select page', 'ftdi' );
-        foreach( $pages as $p ){
-            $option_pages[ $p->ID ] = $p->post_title;
-        }
-
-        foreach (  $wp_customize->controls() as $k => $c )  {
-            if ( $c->type == 'repeatable' ) {
-                $keys = array();
-                if ( property_exists( $c, 'fields' ) ){
-                    foreach ( $c->fields as $field_id => $field ) {
-                        if( isset( $field['options'] ) && is_array( $field['options'] ) ) {
-                            $result = array_diff( $option_pages, $field['options'] );
-                            if ( empty( $result ) ) { // if this option use page
-                                $info = array(
-                                    'key' => $field_id,
-                                    'type' => 'page',
-                                );
-                                array_push( $keys, $info );
-                            }
-                        } elseif( isset( $field['data_type'] ) && in_array( $field['data_type'] , array( 'post', 'page' ) ) ) {
-                            $info = array(
-                                'key' => $field_id,
-                                'type' => 'page',
-                            );
-                            array_push( $keys, $info );
-                        } elseif( $field['type'] == 'media' ) {
-                            $info = array(
-                                'key' => $field_id,
-                                'type' => 'media',
-                            );
-                            array_push( $keys, $info );
-                        }
-                    }
-                }
-
-                $data[ $theme_slug ][ $k ] = $keys;
-
-            } else  if ( $c->type == 'media' ) { // wp media
-                $data[ $theme_slug ][ $k ] = $c->type;
-            }
-
-        }
-        update_option( $key, $data );
+    static function get_github_repo(){
+        return apply_filters( 'demo_contents_github_repo', self::$git_repo );
     }
 
-    function get_recommend_plugins(){
-        $recommend_plugins = get_theme_support( 'recommend-plugins' );
-        if ( is_array( $recommend_plugins ) && isset( $recommend_plugins[0] ) ){
-            $recommend_plugins = $recommend_plugins[0];
-        } else {
-            $recommend_plugins[] = array();
-        }
-
-        $recommend_plugins = array_filter( $recommend_plugins );
-
-        return $recommend_plugins;
+    static function php_support(){
+        return version_compare( PHP_VERSION,  '5.6.20', '>=' );
     }
 
-    function has_inactive_recommend_plugins( $recommend_plugins = false ){
-        if ( ! $recommend_plugins ) {
-            $recommend_plugins = $this->get_recommend_plugins( ) ;
-        }
-        $all_active = true;
-        if ( ! empty( $recommend_plugins ) ) {
-            foreach ( $recommend_plugins as $plugin_slug => $plugin_info ) {
-                $plugin_info = wp_parse_args( $plugin_info, array(
-                    'name' => '',
-                    'active_filename' => '',
-                ) );
-                if ( $plugin_info['active_filename'] ) {
-                    $active_file_name = $plugin_info['active_filename'] ;
-                } else {
-                    $active_file_name = $plugin_slug . '/' . $plugin_slug . '.php';
-                }
-                if ( ! is_plugin_active( $active_file_name ) ) {
-                    $all_active = false;
-                }
-            }
-        }
-
-        return ( $all_active ) ? false : true;
-    }
-
-    function render_recommend_plugins( $recommend_plugins = false ){
-        if ( ! $recommend_plugins ) {
-            $recommend_plugins = $this->get_recommend_plugins( ) ;
-        }
-
-        if ( empty( $recommend_plugins ) ) {
-            return false;
-        }
-        foreach ( $recommend_plugins as $plugin_slug => $plugin_info ) {
-            $plugin_info = wp_parse_args( $plugin_info, array(
-                'name' => '',
-                'active_filename' => '',
-            ) );
-            $plugin_name = $plugin_info['name'];
-            $status = is_dir( WP_PLUGIN_DIR . '/' . $plugin_slug );
-            $button_class = 'install-now button';
-            if ( $plugin_info['active_filename'] ) {
-                $active_file_name = $plugin_info['active_filename'] ;
-            } else {
-                $active_file_name = $plugin_slug . '/' . $plugin_slug . '.php';
-            }
-
-            if ( ! is_plugin_active( $active_file_name ) ) {
-                $button_txt = esc_html__( 'Install Now', 'ftdi' );
-                if ( ! $status ) {
-                    $install_url = wp_nonce_url(
-                        add_query_arg(
-                            array(
-                                'action' => 'install-plugin',
-                                'plugin' => $plugin_slug
-                            ),
-                            network_admin_url( 'update.php' )
-                        ),
-                        'install-plugin_'.$plugin_slug
-                    );
-
-                } else {
-                    $install_url = add_query_arg(array(
-                        'action' => 'activate',
-                        'plugin' => rawurlencode( $active_file_name ),
-                        'plugin_status' => 'all',
-                        'paged' => '1',
-                        '_wpnonce' => wp_create_nonce('activate-plugin_' . $active_file_name ),
-                    ), network_admin_url('plugins.php'));
-                    $button_class = 'activate-now button-primary';
-                    $button_txt = esc_html__( 'Active Now', 'ftdi' );
-                }
-
-                $detail_link = add_query_arg(
-                    array(
-                        'tab' => 'plugin-information',
-                        'plugin' => $plugin_slug,
-                        'TB_iframe' => 'true',
-                        'width' => '772',
-                        'height' => '349',
-
-                    ),
-                    network_admin_url( 'plugin-install.php' )
-                );
-
-                echo '<div class="rcp">';
-                echo '<h4 class="rcp-name">';
-                echo esc_html( $plugin_name );
-                echo '</h4>';
-                echo '<p class="action-btn plugin-card-'.esc_attr( $plugin_slug ).'"><a href="'.esc_url( $install_url ).'" data-slug="'.esc_attr( $plugin_slug ).'" class="'.esc_attr( $button_class ).'">'.$button_txt.'</a></p>';
-                echo '<a class="plugin-detail thickbox open-plugin-details-modal" href="'.esc_url( $detail_link ).'">'.esc_html__( 'Details', 'ftdi' ).'</a>';
-                echo '</div>';
-            }
-
-        }
-    }
-
-
-    function display_import(){
-        $nonce = wp_create_nonce( 'ft_demo_import' );
-        $url = admin_url('admin-ajax.php');
-        $url = remove_query_arg( array( '_nonce', 'action' ) , $url );
-
-        $current_item = apply_filters( 'ft_demo_import_current_item',  false );
-
-        if ( ! $current_item ) {
-            $current_item = get_option( 'template' );
-            $current_item = untrailingslashit( $current_item );
-        }
-
-        $current_item_name = str_replace( array( '-', '_' ), ' ', $current_item );
-        $current_item_name = ucwords( $current_item_name );
-
-
-        $import_url = add_query_arg( array(
-            '_nonce'    => $nonce,
-            'action'    => 'ft_demo_import_content',
-            'data'      => $current_item
-        ), $url );
-
-        $download_url = add_query_arg( array(
-            '_nonce'    => $nonce,
-            'action'    => 'ft_demo_import_download',
-            'data'      => $current_item
-        ), $url );
-
-        $import_export_config_url = add_query_arg( array(
-            '_nonce'    => $nonce,
-            'action'    => 'ft_demo_export',
-            'type'      => 'config',
-            'data'      => $current_item
-        ), $url );
-
-        $this->js();
-
-        $recommend_plugins = $this->get_recommend_plugins();
-
-        ?>
-        <div class="ft-import-box ft-import-welcome">
-            <h3><?php esc_html_e( 'Welcome to FameThemes Demo Importer!', 'ftdi' ); ?></h3>
-            <p>
-                <?php esc_html_e( 'Importing demo data (post, pages, images, theme settings, ...) is the easiest way to setup your theme. It will allow you to quickly edit everything instead of creating content from scratch. When you import the data, the following things might happen:', 'ftdi' ); ?>
-            </p>
-            <ul>
-                <li><?php esc_html_e( 'No existing posts, pages, categories, images, custom post types or any other data will be deleted or modified.', 'ftdi' ); ?></li>
-                <li><?php esc_html_e( 'Posts, pages, images, widgets and menus will get imported.', 'ftdi' ); ?></li>
-                <li><?php esc_html_e( 'Please click "Import Demo Data" button only once and wait, it can take a couple of minutes.', 'ftdi' ); ?></li>
-            </ul>
-            <p><?php esc_html_e( 'Notice: If your site already has content, please make sure you backup your database and WordPress files before import demo data.', 'ftdi' ); ?></p>
-        </div>
-
-        <?php if ( ! empty( $recommend_plugins ) && $this->has_inactive_recommend_plugins( $recommend_plugins ) ) { ?>
-        <div id="plugin-filter" class="recommend-plugins">
-            <h3><?php esc_html_e( 'Recommend Plugins', 'ftdi' ); ?></h3>
-            <p><?php esc_html_e( 'To fully import demo content, please install and activate all recommend plugins before import.', 'ftdi' ); ?></p>
-            <?php
-            $this->render_recommend_plugins();
-            ?>
-        </div>
-        <?php } ?>
-
-        <?php if ( $this->check_data_exists( $current_item ) ){ ?>
-            <div class="ft-import-box ft-import-theme">
-                <p><?php printf( esc_html__( 'You are ready to import demo data for %1$s', 'ftdi' ), '<strong>'.esc_html( $current_item_name ).'</strong>' ); ?></p>
-            </div>
-
-            <div class="ft-import-action">
-                <a class="button button-primary button-hero ft-demo-import-now" data-download="<?php echo esc_url( $download_url ); ?>" data-import="<?php echo esc_url( $import_url ); ?>" href="#"><?php esc_html_e( 'Import Demo Data', 'ftdi' ); ?></a>
-                <?php if ( isset( $_REQUEST['export'] ) ) { ?>
-                    <a class="button button-secondary ft-export-config" href="<?php echo esc_url( $import_export_config_url ); ?>"><?php esc_html_e( 'Export Config', 'ftdi' ); ?></a>
-                <?php } ?>
-            </div>
-            <div class="ft-ajax-notice"></div>
-
-        <?php } else { ?>
-            <div class="ft-import-box ft-import-theme">
-                <p><strong><?php esc_html_e( 'Notice:', 'ftdi' ); ?></strong> <?php esc_html_e( "No FameThemes's themes data detected, please make sure you are using one of our theme.", 'ftdi' ); ?></p>
-            </div>
-        <?php } ?>
-        <?php
-
-    }
-
-    function js(){
-        wp_enqueue_script( 'ft-demo-importer', $this->url.'assets/js/importer.js', array( 'jquery' ) );
-        wp_localize_script( 'ft-demo-importer', 'FT_IMPORT_DEMO', array(
-            'downloading' => esc_html__( 'Downloading...', 'ftid' ),
-            'importing' => esc_html__( 'Importing...', 'ftid' ),
-            'import' => esc_html__( 'Import Now', 'ftid' ),
-            'import_again' => esc_html__( 'Import Again.', 'ftid' ),
-            'imported' => esc_html__( 'Demo Data Imported !', 'ftid' ),
-            'import_error' => esc_html__( 'Demo Data Import Error', 'ftid' ),
-            'import_error_msg' => sprintf( esc_html__( 'Check your %1$s, demo data may imported.', 'ftid' ), '<a target="blank" href="'.home_url('/').'">'.esc_html__( 'front end', 'ftid' ).'</a>' ),
-            'confirm_import' => esc_html__( 'Are you sure ?', 'ftid' ),
-            'confirm_leave' => esc_html__( 'Importing script is running, do you want to stop it ?', 'ftid' ),
-            'demo_imported' => sprintf( esc_html__( 'The demo import has finished. Please check your %1$s and make sure that everything has imported correctly. If it did, you can deactivate the FameThemes Demo Importer plugin, because it has done its job.', 'ftdi' ),
-                '<a target="_blank" href="'.esc_url( home_url( '/' ) ).'">'.esc_html__( 'front page', 'ftdi' ).'</a>' ),
-            'no_data_found' => esc_html__( 'No data found.', 'ftid' ),
-            'demo_import_failed' => sprintf( esc_html__( 'Demo data import failed, please %1$s to get help.', 'ftdi' ), '<a target="_blank" href="https://www.famethemes.com/contact">'.esc_html__( 'contact us', 'ftdi' ).'</a>' ),
-
-        ) );
-    }
-
-    function css( ){
-        wp_enqueue_style( 'ft-demo-importer', $this->url . 'assets/css/importer.css', false );
-    }
-
-    function check_data_exists( $item_name ){
-        $file =  $this->git_repo.$item_name.'/dummy-data.xml';
-        $response = wp_remote_get( $file );
-        $response_code = wp_remote_retrieve_response_code( $response );
-        if ( 200 != $response_code ) {
-            return false;
-        }
-
-        return true;
-    }
 
     /**
      * Handles a side-loaded file in the same way as an uploaded file is handled by media_handle_upload().
@@ -412,6 +137,8 @@ class FT_Demo_Content_Importer {
 
         if ( $name ) {
             $file_array['name'] = $name;
+        } else {
+            $file_array['name'] = basename( $url );
         }
         // Do the validation and storage stuff.
         $file_path_or_id = self::media_handle_sideload( $file_array, 0, null, array(), $save_attachment );
@@ -421,107 +148,298 @@ class FT_Demo_Content_Importer {
             @unlink( $file_array['tmp_name'] );
             return false;
         }
-
         return $file_path_or_id;
     }
 
-    function download_dummy_files( $item_name ){
-        $files = array(
-            'dummy-data'    => 'xml', // file ext
-            'config'        => 'json'
+    /**
+     * Available widgets
+     *
+     * Gather site's widgets into array with ID base, name, etc.
+     * Used by export and import functions.
+     *
+     * @since 0.4
+     * @global array $wp_registered_widget_updates
+     * @return array Widget information
+     */
+    static function get_available_widgets() {
+
+        global $wp_registered_widget_controls;
+
+        $widget_controls = $wp_registered_widget_controls;
+
+        $available_widgets = array();
+
+        foreach ( $widget_controls as $widget ) {
+
+            if ( ! empty( $widget['id_base'] ) && ! isset( $available_widgets[$widget['id_base']] ) ) { // no dupes
+
+                $available_widgets[$widget['id_base']]['id_base'] = $widget['id_base'];
+                $available_widgets[$widget['id_base']]['name'] = $widget['name'];
+
+            }
+
+        }
+
+        return $available_widgets;
+
+    }
+
+
+    static function get_update_keys(){
+
+        $key = 'demo_contents_customizer_keys';
+        $theme_slug = get_option( 'stylesheet' );
+        $data = get_option( $key );
+        if ( ! is_array( $data ) ) {
+            $data = array();
+        }
+        if ( isset( $data[ $theme_slug ] ) ){
+            return $data[ $theme_slug ];
+        }
+
+        $r = wp_remote_post( admin_url( 'customize.php' ), array(
+                'method' => 'POST',
+                'timeout' => 45,
+                'redirection' => 5,
+                'httpversion' => '1.0',
+                'blocking' => true,
+                'headers' => array(),
+                'cookies' => array(
+                    SECURE_AUTH_COOKIE => $_COOKIE[ SECURE_AUTH_COOKIE ],
+                    AUTH_COOKIE => $_COOKIE[ AUTH_COOKIE ],
+                    LOGGED_IN_COOKIE => $_COOKIE[ LOGGED_IN_COOKIE ],
+                )
+            )
         );
-        $downloaded_file = array();
-        foreach ( $files as $k => $ext ) {
-            $file = $item_name.'-'.$k.'.'.$ext;
-            $file_path = self::download_file( $this->git_repo.$item_name.'/'.$k.'.'.$ext, $file, false );
-            $downloaded_file[ $k ] = $file_path;
-        }
 
-        return $downloaded_file;
-    }
-
-
-
-    function data_dir( $param ){
-
-        $siteurl = get_option( 'siteurl' );
-        $upload_path = trim( get_option( 'upload_path' ) );
-
-        if ( empty( $upload_path ) || 'wp-content/uploads' == $upload_path ) {
-            $dir = WP_CONTENT_DIR . '/uploads';
-        } elseif ( 0 !== strpos( $upload_path, ABSPATH ) ) {
-            // $dir is absolute, $upload_path is (maybe) relative to ABSPATH
-            $dir = path_join( ABSPATH, $upload_path );
+        if ( is_wp_error( $r ) ) {
+            return false;
         } else {
-            $dir = $upload_path;
-        }
+            global $wpdb;
 
-        if ( !$url = get_option( 'upload_url_path' ) ) {
-            if ( empty($upload_path) || ( 'wp-content/uploads' == $upload_path ) || ( $upload_path == $dir ) )
-                $url = WP_CONTENT_URL . '/uploads';
-            else
-                $url = trailingslashit( $siteurl ) . $upload_path;
-        }
+            $row = $wpdb->get_row( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s LIMIT 1", $key ) );
+            $notoptions = wp_cache_get( 'notoptions', 'options' );
+            // Has to be get_row instead of get_var because of funkiness with 0, false, null values
+            if ( is_object( $row ) ) {
+                $value = $row->option_value;
+                $data = apply_filters( 'option_' . $key, maybe_unserialize( $value ), $key );
+                wp_cache_add( $key, $value, 'options' );
+            } else { // option does not exist, so we must cache its non-existence
+                if ( ! is_array( $notoptions ) ) {
+                    $notoptions = array();
+                }
+                $notoptions[$key] = true;
+                wp_cache_set( 'notoptions', $notoptions, 'options' );
 
+                /** This filter is documented in wp-includes/option.php */
+                $data = apply_filters( 'default_option_' . $key, '', $key );
+            }
 
-        $param['path']  = $dir . '/ft-dummy-data';
-        $param['url']   = $url . '/ft-dummy-data';
+            if ( ! is_array( $data ) ) {
+                $data = array();
+            }
 
-        return $param;
-    }
-
-
-    function ajax_download(){
-        $nonce = $_REQUEST['_nonce'];
-        if ( ! wp_verify_nonce( $nonce, 'ft_demo_import' ) ) {
-            die( 'Security check' );
-        }
-        add_filter('upload_dir', array( $this, 'data_dir' ), 99 );
-
-        $item = wp_strip_all_tags( $_REQUEST['data'] );
-        delete_transient( 'ft_demo_import_downloaded_'.$item );
-        $import_files = $this->download_dummy_files( $item );
-        set_transient( 'ft_demo_import_downloaded_'.$item, $import_files, 3 * HOUR_IN_SECONDS );
-
-        remove_filter('upload_dir', array( $this, 'data_dir' ), 99 );
-
-        wp_die('downloaded');
-    }
-
-    function ajax_import(){
-
-        $nonce = $_REQUEST['_nonce'];
-        if ( ! wp_verify_nonce( $nonce, 'ft_demo_import' ) ) {
-            die( 'Security check' );
-        }
-
-        $item = wp_strip_all_tags( $_REQUEST['data'] );
-        $import_files = get_transient( 'ft_demo_import_downloaded_'.$item );
-
-        if ( $import_files ) {
-            $import = new FT_Demo_Content( $import_files );
-            $import->import();
-        } else {
-            echo 'no_data_found';
-        }
-
-        // Remove data files
-        /*
-        foreach ( $import_files as $k => $f ) {
-            if ( file_exists( $f ) ) {
-                @unlink( $f );
+            if ( isset( $data[ $theme_slug ] ) ) {
+                return $data[ $theme_slug ];
             }
         }
-        */
 
-        die();
+        return false;
+    }
+
+    /**
+     * Generate Widgets export data
+     *
+     * @since 0.1
+     * @return string Export file contents
+     */
+    static function generate_widgets_export_data() {
+
+        // Get all available widgets site supports
+        $available_widgets = self::get_available_widgets();
+
+        // Get all widget instances for each widget
+        $widget_instances = array();
+        foreach ( $available_widgets as $widget_data ) {
+
+            // Get all instances for this ID base
+            $instances = get_option( 'widget_' . $widget_data['id_base'] );
+
+            // Have instances
+            if ( ! empty( $instances ) ) {
+
+                // Loop instances
+                foreach ( $instances as $instance_id => $instance_data ) {
+
+                    // Key is ID (not _multiwidget)
+                    if ( is_numeric( $instance_id ) ) {
+                        $unique_instance_id = $widget_data['id_base'] . '-' . $instance_id;
+                        $widget_instances[$unique_instance_id] = $instance_data;
+                    }
+
+                }
+
+            }
+
+        }
+
+        // Gather sidebars with their widget instances
+        $sidebars_widgets = get_option( 'sidebars_widgets' ); // get sidebars and their unique widgets IDs
+        $sidebars_widget_instances = array();
+        foreach ( $sidebars_widgets as $sidebar_id => $widget_ids ) {
+
+            // Skip inactive widgets
+            if ( 'wp_inactive_widgets' == $sidebar_id ) {
+                continue;
+            }
+
+            // Skip if no data or not an array (array_version)
+            if ( ! is_array( $widget_ids ) || empty( $widget_ids ) ) {
+                continue;
+            }
+
+            // Loop widget IDs for this sidebar
+            foreach ( $widget_ids as $widget_id ) {
+
+                // Is there an instance for this widget ID?
+                if ( isset( $widget_instances[$widget_id] ) ) {
+
+                    // Add to array
+                    $sidebars_widget_instances[$sidebar_id][$widget_id] = $widget_instances[$widget_id];
+
+                }
+
+            }
+
+        }
+
+        // Filter pre-encoded data
+        $data = apply_filters( 'ft_demo_export_widgets_data', $sidebars_widget_instances );
+
+        // Encode the data for file contents
+        return $data;
+
+    }
+
+     static  function get_widgets_config_fields( $config){
+        $_config = array();
+        foreach ( $config as $k => $f ) {
+            switch ( $f['type'] ) {
+                case 'list_cat':
+                    $_config[ $f['name'] ] = array(
+                        'type' => 'term',
+                        'tax' =>  'category'
+                    );
+                    break;
+                case 'group':
+                    foreach ( $f['fields'] as $_k => $_f ) {
+                        if ( $_f['type'] == 'source' ) {
+                            if ( isset( $_f['source']['post_type'] ) ) {
+                                $_config[ $_f['name'] ] = 'post';
+                            } else {
+                                $_config[ $_f['name'] ] = array(
+                                    'type' => 'term',
+                                    'tax' => $_f['source']['tax']
+                                );
+                            }
+                        } else {
+                            $_config[ $_f['name'] ] = $_f['type'];
+                        }
+                    }
+
+                    $_config[ $f['name'] ] = 'repeater';
+                    break;
+                default:
+                    if ( $f['type'] == 'source' ) {
+                        if ( isset( $f['source']['post_type'] ) ) {
+                            $_config[ $f['name'] ] = 'post';
+                        } else {
+                            $_config[ $f['name'] ] = array(
+                                'type' => 'term',
+                                'tax' => $f['source']['tax']
+                            );
+                        }
+                    } else {
+                        $_config[ $f['name'] ] = $f['type'];
+                    }
+                    break;
+            }
+
+        }
+
+        return $_config;
     }
 
 
-    function ajax_export(){
-        $type = $_REQUEST['type'];
+    static function get_widgets_config(){
+        global $wp_registered_widget_controls;
+
+        $widget_instances = array();
+
+        foreach ( $wp_registered_widget_controls as $widget_id => $widget ) {
+            $base_id = isset($widget['id_base']) ? $widget['id_base'] : null;
+            if (!empty($base_id) && !isset($widget_instances[$base_id])) {
+                $widget_instances[$base_id] = '';
+            }
+        }
+        global $wp_widget_factory;
+
+        foreach ( $wp_widget_factory->widgets  as $class_name => $object ){
+            $config = array();
+            if( method_exists( $object,'config' ) ) {
+                $config = $object->config();
+            }
+            // get_configs
+            if( method_exists( $object,'get_configs' ) ) {
+                $config = $object->get_configs();
+            }
+
+
+            $widget_instances[$object->id_base] = self::get_widgets_config_fields( $config );
+        }
+
+        return $widget_instances;
+    }
+
+
+    static function generate_config(){
+        $nav_menu_locations = get_theme_mod( 'nav_menu_locations' );
+        // Just update the customizer keys
+
+        $regen_keys = self::get_update_keys();
+
+        $config = array(
+            'home_url' => home_url('/'),
+            'menus' => $nav_menu_locations,
+            'pages' => array(
+                'page_on_front'  => get_option( 'page_on_front' ),
+                'page_for_posts' => get_option( 'page_for_posts' ),
+            ),
+            'options' => array(
+                'show_on_front' => get_option( 'show_on_front' )
+            ),
+            'theme_mods' => get_theme_mods(),
+            'widgets'       => self::generate_widgets_export_data(),
+            'widgets_config' => self::get_widgets_config(),
+            'customizer_keys' => $regen_keys
+        );
+
+        $config = apply_filters( 'demo_contents_generate_config', $config );
+
+        return json_encode( $config );
+    }
+
+    function export(){
+        if ( ! isset( $_REQUEST['demo_contents_export'] ) ) {
+            return ;
+        }
+        if ( ! current_user_can( 'export' ) ) {
+            return ;
+        }
+
         ob_start();
         ob_end_clean();
+        ob_flush();
 
         /**
          * Filters the export filename.
@@ -538,28 +456,65 @@ class FT_Demo_Content_Importer {
         header( 'Content-Disposition: attachment; filename=' . $filename );
         header( 'Content-Type: application/xml; charset=' . get_option( 'blog_charset' ), true );
 
-        switch ( $type ) {
-            case 'options':
-            case 'option':
-            case 'config':
-            case 'widget':
-            case 'widgets':
-            case 'theme_mod':
-            case 'theme_mods':
-                echo FT_Demo_Content::generate_config();
-                break;
-        }
+        echo Demo_Contents::generate_config();
         die();
+    }
+
+    /**
+     * Check if an item exists out there in the "ether".
+     *
+     * @param string $url - preferably a fully qualified URL
+     * @return boolean - true if it is out there somewhere
+     */
+    static function url_exists($url) {
+        if (($url == '') || ($url == null)) {
+            return false;
+        }
+
+        if ( strpos( $url, home_url() ) !== false ) {
+            $args = array(
+                'method' => 'GET',
+                'timeout' => 45,
+                'redirection' => 5,
+                'httpversion' => '1.0',
+                'blocking' => true,
+                'headers' => array(),
+                'cookies' => array(
+                    SECURE_AUTH_COOKIE => isset($_COOKIE[SECURE_AUTH_COOKIE]) ? $_COOKIE[SECURE_AUTH_COOKIE] : null,
+                    AUTH_COOKIE => isset($_COOKIE[AUTH_COOKIE]) ? $_COOKIE[AUTH_COOKIE] : null,
+                    LOGGED_IN_COOKIE => isset($_COOKIE[LOGGED_IN_COOKIE]) ? $_COOKIE[LOGGED_IN_COOKIE] : null,
+                )
+            );
+        } else {
+            $args = array();
+        }
+
+        $response = wp_remote_get( $url, $args);
+        $code = wp_remote_retrieve_response_code( $response );
+        $body = wp_remote_retrieve_body( $response );
+        $body = wp_unslash( $body );
+
+        if ( strpos( $body, 'id="error-page"' ) !== false ) {
+            return false;
+        }
+        $accepted_status_codes = array( 200, 301 );
+        if ( ! is_wp_error( $response ) && in_array( wp_remote_retrieve_response_code( $response ), $accepted_status_codes ) ) {
+            return true;
+        }
+        return false;
     }
 
 }
 
 if ( is_admin() ) {
-    function ft_demo_importer(){
-        new FT_Demo_Content_Importer();
+    function demo_contents__init(){
+        new Demo_Contents();
+
     }
-    add_action( 'plugins_loaded', 'ft_demo_importer' );
+    add_action( 'plugins_loaded', 'demo_contents__init' );
 }
+
+
 
 /**
  * Redirect to import page
@@ -567,8 +522,9 @@ if ( is_admin() ) {
  * @param $plugin
  * @param bool|false $network_wide
  */
-function ft_demo_importer_plugin_activate( $plugin, $network_wide = false ) {
+function demo_contents_importer_plugin_activate( $plugin, $network_wide = false ) {
     if ( ! $network_wide &&  $plugin == plugin_basename( __FILE__ ) ) {
+
         $template_slug = get_option('template');
         $url = add_query_arg(
             array(
@@ -577,9 +533,46 @@ function ft_demo_importer_plugin_activate( $plugin, $network_wide = false ) {
             ),
             admin_url('themes.php')
         );
-        wp_redirect($url);
-        die();
+
+        // Check url exists
+        if ( Demo_Contents::url_exists( $url ) ) {
+            wp_redirect($url);
+            die();
+        }
+
+        $url = add_query_arg(
+            array(
+                'page' => $template_slug,
+                'tab' => 'demo-data-importer',
+            ),
+            admin_url('themes.php')
+        );
+        if ( Demo_Contents::url_exists( $url ) ) {
+            wp_redirect($url);
+            die();
+        }
     }
 }
-add_action( 'activated_plugin', 'ft_demo_importer_plugin_activate', 90, 2 );
+add_action( 'activated_plugin', 'demo_contents_importer_plugin_activate', 90, 2 );
+
+
+// Support Upload XML file
+add_filter('upload_mimes', 'demo_contents_custom_upload_xml');
+function demo_contents_custom_upload_xml($mimes)
+{
+    if ( current_user_can( 'upload_files' ) ) {
+    $mimes = array_merge($mimes, array(
+        'xml' => 'application/xml',
+        'json' => 'application/json'
+    ));
+    }
+    return $mimes;
+}
+
+
+
+
+
+
+
 

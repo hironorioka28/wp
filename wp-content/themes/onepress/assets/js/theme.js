@@ -54,26 +54,6 @@ function _to_bool( v ) {
     return false;
 }
 
-var isMobile = {
-    Android: function() {
-        return navigator.userAgent.match(/Android/i);
-    },
-    BlackBerry: function() {
-        return navigator.userAgent.match(/BlackBerry/i);
-    },
-    iOS: function() {
-        return navigator.userAgent.match(/iPhone|iPad|iPod/i);
-    },
-    Opera: function() {
-        return navigator.userAgent.match(/Opera Mini/i);
-    },
-    Windows: function() {
-        return navigator.userAgent.match(/IEMobile/i);
-    },
-    any: function() {
-        return (isMobile.Android() || isMobile.BlackBerry() || isMobile.iOS() || isMobile.Opera() || isMobile.Windows());
-    }
-};
 
 /**
  * skip-link-focus-fix.js
@@ -115,6 +95,28 @@ var isMobile = {
  */
 jQuery( document ).ready( function( $ ) {
 
+    var isMobile = {
+        Android: function() {
+            return navigator.userAgent.match(/Android/i);
+        },
+        BlackBerry: function() {
+            return navigator.userAgent.match(/BlackBerry/i);
+        },
+        iOS: function() {
+            return navigator.userAgent.match(/iPhone|iPad|iPod/i);
+        },
+        Opera: function() {
+            return navigator.userAgent.match(/Opera Mini/i);
+        },
+        Windows: function() {
+            return navigator.userAgent.match(/IEMobile/i);
+        },
+        any: function() {
+            return (isMobile.Android() || isMobile.BlackBerry() || isMobile.iOS() || isMobile.Opera() || isMobile.Windows());
+        }
+    };
+
+
     if ( onepress_js_settings.onepress_disable_sticky_header != '1' ) {
         var is_top_header = $( '#page > .site-header').length ?  true : false;
         $('.site-header').eq(0).wrap( '<div class="site-header-wrapper">' );
@@ -127,39 +129,24 @@ jQuery( document ).ready( function( $ ) {
         }
         var header_fixed = $('.site-header').eq(0);
 
-        var header_h = header_fixed.height() || 0;
+        $( document ).scroll( function(){
+            var header_parent = header_fixed.parent();
+            var p_to_top = header_parent.offset().top;
+            var st = $( document ).scrollTop();
 
-        var topbar = $( '#wpadminbar' ).height() || 0;
-        if (  topbar > 0 ) {
-            var  topbar_pos = $( '#wpadminbar').css( 'position' );
-            if ( 'fixed' !== topbar_pos ) {
-                topbar = 0;
-            }
-        }
-
-        if ( ! is_transparent){
-            $wrap.height( header_h );
-        }
-
-        $( window).resize( function(){
-            topbar = $( '#wpadminbar' ).height() || 0;
+            var topbar = $( '#wpadminbar' ).height() || 0;
             if (  topbar > 0 ) {
                 var  topbar_pos = $( '#wpadminbar').css( 'position' );
                 if ( 'fixed' !== topbar_pos ) {
                     topbar = 0;
                 }
             }
-            header_h = header_fixed.height() || 0;
-            if ( ! is_transparent){
-                $wrap.height( header_h );
+            //  if( st > p_to_top && st > 0 ) {
+            var post_check = 1;
+            if ( topbar ) {
+                post_check = 0;
             }
-        } );
-
-        $( document ).scroll( function(){
-            var header_parent = header_fixed.parent();
-            var p_to_top = header_parent.offset().top;
-            var st = $( document ).scrollTop();
-            if( st > p_to_top && st > 0 ) {
+            if( st > post_check ) {
                 $wrap.addClass( 'is-fixed').removeClass( 'no-scroll' );
                 header_fixed.addClass('header-fixed');
                 header_fixed.css( 'top', topbar+'px' );
@@ -170,17 +157,17 @@ jQuery( document ).ready( function( $ ) {
             }
         });
 
+
     }
 
-});
 
 
-/*
-* Nav Menu & element actions
-*
-* Smooth scroll for navigation and other elements
-*/
-( function( $ ) {
+    /*
+     * Nav Menu & element actions
+     *
+     * Smooth scroll for navigation and other elements
+     */
+
     var mobile_max_width =  1140; // Media max width for mobile
     var main_navigation = jQuery('.main-navigation .onepress-menu');
     var stite_header =  $( '.site-header' );
@@ -383,11 +370,6 @@ jQuery( document ).ready( function( $ ) {
         } );
     }
 
-})( jQuery );
-
-
-
-jQuery(document).ready(function ( $ ) {
 
     if ( isMobile.any() ) {
         jQuery( 'body' ).addClass( 'body-mobile' ).removeClass( 'body-desktop' );
@@ -454,7 +436,6 @@ jQuery(document).ready(function ( $ ) {
     }
 
 
-
     /**
      * Section: Hero Full Screen Slideshow
      */
@@ -511,18 +492,73 @@ jQuery(document).ready(function ( $ ) {
         });
     }
 
-
-    // Parallax Section
-
-    $.stellar({
-        scrollProperty: 'scroll',
-        positionProperty: 'position',
-        responsive: true,
-        horizontalScrolling: false,
-        verticalScrolling: true,
-        parallaxBackgrounds: false,
-        parallaxElements: true,
+    $('.section-parallax, .parallax-hero').bind('inview', function ( event, visible ) {
+        if ( visible == true ) {
+        } else {
+        }
     });
+
+    var lastScrollTop = 0;
+    // Parallax effect
+    function parrallaxHeight() {
+        $('.section-parallax ').each( function(  ){
+            var $el = $( this );
+            $('.parallax-bg', $el ).height( '' );
+            var w = $el.width();
+            var h = $el.height();
+            if ( h == 0 ) {
+                h = 1;
+            }
+            if ( h < w ) {
+                h = h * 2.0;
+                $('.parallax-bg', $el).height(h);
+            }
+        } );
+    }
+    function parallaxPosition( direction ){
+        var top = $( window ).scrollTop();
+        var wh = $( window).height();
+        $('.section-parallax, .parallax-hero').each( function(  ){
+            var $el = $( this );
+            var w = $el.width();
+            //var sh = $el.height();
+            var r = .3;
+            if ( wh > w ) {
+                r = .3;
+            } else {
+                r = .6;
+            }
+
+            var is_inview = $el.data( 'inview' );
+            if ( is_inview ) {
+                var offsetTop = $el.offset().top;
+                var diff, bgTop;
+                diff = top - offsetTop;
+                bgTop = diff * r;
+                $( '.parallax-bg', $el ) .css( 'background-position', '50% '+( bgTop )+'px' );
+            }
+
+        } );
+    }
+
+    $(window).scroll(function(e){
+        var top = $( window ).scrollTop();
+        var direction = '';
+        if ( top > lastScrollTop ){
+            direction = 'down';
+        } else {
+            direction = 'up';
+        }
+        lastScrollTop = top ;
+        parallaxPosition( );
+    });
+
+    $(window).resize( function(){
+        parrallaxHeight();
+        parallaxPosition( );
+    } );
+
+    parrallaxHeight();
 
 
     // Parallax hero
@@ -532,12 +568,6 @@ jQuery(document).ready(function ( $ ) {
         $('.parallax-bg', hero).imagesLoaded({background: true}, function () {
             hero.find('.hero-slideshow-wrapper').addClass('loaded');
             hero.removeClass('loading');
-
-            hero.stellar({
-                scrollProperty: 'scroll',
-                positionProperty: 'position',
-                horizontalScrolling: false,
-            });
 
             setTimeout(function () {
                 hero.find('.hero-slideshow-wrapper').find('.slider-spinner').remove();
@@ -553,19 +583,16 @@ jQuery(document).ready(function ( $ ) {
         var s = $(this);
         $('.parallax-bg', s).imagesLoaded({background: true}, function () {
 
-            s.stellar({
-                scrollProperty: 'scroll',
-                positionProperty: 'position',
-                horizontalScrolling: false,
-            });
-
         }).fail(function (instance) {
 
         });
     });
 
 
-
+    // Trigger when site load
+    setTimeout( function(){
+        $(window).trigger('scroll');
+    }, 500 );
 
 
     /**
@@ -677,9 +704,9 @@ jQuery(document).ready(function ( $ ) {
                     }
 
                     //gutter = gutter / 2;
-                   // m.parent().css({'margin-left': -gutter, 'margin-right': -gutter});
+                    // m.parent().css({'margin-left': -gutter, 'margin-right': -gutter});
                     m.find('.g-item').css({'width': ( 100 / columns  ) + '%', 'float': 'left', 'padding': 0});
-                   // m.find('.g-item .inner').css({'padding': gutter / 2});
+                    // m.find('.g-item .inner').css({'padding': gutter / 2});
                     m.isotope({
                         // options
                         itemSelector: '.g-item',
@@ -724,5 +751,6 @@ jQuery(document).ready(function ( $ ) {
             }
         } );
     }
+
 
 });

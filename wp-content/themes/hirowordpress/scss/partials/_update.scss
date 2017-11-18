@@ -1,0 +1,40 @@
+.update {
+  width: calc(100vw - 20px);
+  padding: 12px;
+  background: inherit;
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+  &::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background: inherit;
+    filter: blur(6px);
+    transform: scale(1.02);
+  }
+  &__title {
+    margin-bottom: 20px;
+    color: $white-l;
+    font-weight: 400;
+    text-align: center;
+    letter-spacing: .8rem;
+  }
+  &__more {
+    margin-top: 12px;
+    padding: 8px 0;
+    background-color: rgba($white-l, .2);
+    display: block;
+    border: 1px solid $white-l;
+    border-radius: 4px;
+    text-align: center;
+    color: $white-l;
+    font-size: 1.8rem;
+    font-weight: 200;
+    letter-spacing: .8rem;
+    text-decoration: none;
+  }
+}

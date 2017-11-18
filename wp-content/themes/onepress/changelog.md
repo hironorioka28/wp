@@ -1,6 +1,51 @@
 ====================================================================
 CHANGELOG
 ====================================================================
+## 1.4.3
+* Fix header issue.
+
+## 1.4.2
+* Improve front page sections.
+* Fix an issue incorrect section position for first menu item is clicked.
+* Improve nav menu.
+* Add single post options.
+* Add filter for section container class.
+
+## 1.4.1
+* Fix js error.
+
+## 1.4.0
+* Update JS, fix footer issue.
+
+## 1.3.9
+* Update Customizer style.
+* Update nav bar, hero background.
+* Update sanitize email.
+* Update parallax for tablet.
+* Fixed hero layout 2 issue.
+* Fixed WC login & register page layout.
+
+
+## 1.3.8
+* Update WooCommerce layout.
+
+## 1.3.7
+* Fix safari menu issue.
+* Improve editor customizer.
+* Run shortcode in hero content.
+* Improve parallax when small padding.
+* Update Bootstrap.
+* Clean up js fix conflict plugin.
+* HTML format for contact text.
+* Do not effect custom content by plugins, change `the_content` to `onepress_the_content`
+
+
+## 1.3.6
+* Improve parallax.
+* Fix WooCommerce issues.
+* Fix a bug load css.map files.
+
+
 ## 1.3.5
 * Update responsive parallax.
 * Update menu toggle button.

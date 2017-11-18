@@ -1,0 +1,36 @@
+.theContent {
+  color: $white-l;
+  h1 {
+    margin-bottom: 16px;
+    font-size: 2rem;
+    font-weight: 400;
+  }
+  img {
+    margin: 0 -20px;
+    max-width: calc(100% + 40px);
+    height: auto;
+    &.alignleft,
+    &.alignright {
+      margin: 0;
+      max-width: 100%;
+    }
+    &.alignleft {
+      margin-right: 20px;
+      float: left;
+    }
+    &.alignright {
+      margin-left: 20px;
+      float: right;
+    }
+  }
+  p {
+    margin-bottom: 16px;
+    font-size: 1.4rem;
+    font-weight: 200;
+    text-align: justify;
+    line-height: 1.8;
+    &:last-of-type {
+      margin-bottom: 0;
+    }
+  }
+}

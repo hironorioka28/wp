@@ -347,7 +347,10 @@ class SiteGuardReallySimpleCaptcha extends SiteGuard_Base {
 
 				$stat = @stat( $file );
 				if ( ( $stat['mtime'] + $minutes * 60 ) < time() ) {
-					@unlink( $file );
+					if ( ! @unlink( $file ) ) {
+						@chmod( $file, 0644 );
+						@unlink( $file );
+					}
 					$count += 1;
 				}
 			}
@@ -369,8 +372,10 @@ class SiteGuardReallySimpleCaptcha extends SiteGuard_Base {
 		$dir = trailingslashit( $this->tmp_dir );
 		$dir = $this->normalize_path( $dir );
 
-		if ( ! wp_mkdir_p( $dir ) )
+		if ( ! wp_mkdir_p( $dir ) ) {
+			siteguard_error_log( 'failed to make directory (' . $dir . '). :' . __FILENAME__ );
 			return false;
+		}
 
 		$htaccess_file = $this->normalize_path( $dir . '.htaccess' );
 
@@ -381,12 +386,8 @@ class SiteGuardReallySimpleCaptcha extends SiteGuard_Base {
 
 		if ( ! file_exists( $htaccess_file ) ) {
 			if ( $handle = @fopen( $htaccess_file, 'w' ) ) {
-				fwrite( $handle, 'Order deny,allow' . "\n" );
-				fwrite( $handle, 'Deny from all' . "\n" );
-				fwrite( $handle, '<Files ~ "^[0-9A-Za-z]+\\.(jpeg|gif|png)$">' . "\n" );
-				fwrite( $handle, '    Allow from all' . "\n" );
-				fwrite( $handle, '    Satisfy Any' . "\n" );
-				fwrite( $handle, '</Files>' . "\n" );
+				fwrite( $handle, 'RewriteEngine On' . "\n" );
+				fwrite( $handle, 'RewriteRule \.txt - [F]' . "\n" );
 				fclose( $handle );
 			} else {
 				siteguard_error_log( 'failed to open file (' . $htaccess_file . '). :' . __FILENAME__ );
@@ -397,7 +398,7 @@ class SiteGuardReallySimpleCaptcha extends SiteGuard_Base {
 		$dmy_dst_file = $dir . 'dummy.png';
 
 		if ( ! file_exists( $dmy_dst_file ) ) {
-			copy( $dmy_src_file, $dmy_dst_file );
+			return @copy( $dmy_src_file, $dmy_dst_file );
 		}
 
 		return true;

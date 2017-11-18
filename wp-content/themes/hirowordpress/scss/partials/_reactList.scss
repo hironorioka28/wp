@@ -1,0 +1,10 @@
+.reactList {
+  list-style: none;
+  &__item {
+    margin-bottom: 12px;
+    font-size: 2rem;
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+}
